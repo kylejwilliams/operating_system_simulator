@@ -6,11 +6,29 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
-typedef struct { int sec, nsec; } tick_t; /* represents a clock containing the time in seconds and nanoseconds */
-const int NSECS_IN_SECS = 1000000000; /* 10^9 nanoseconds per second */
+typedef struct { int sec, nsec; } tick_t;   /* represents a clock containing the time in seconds and nanoseconds */
+const int NSECS_IN_SECS = 1000000000;       /* 10^9 nanoseconds per second */
+volatile sig_atomic_t term_flag = 0;        /* set this flag once the program has reached its timeout value*/
+volatile sig_atomic_t int_flag = 0;         /* set this flag when ctrl+c (interrupt) is thrown */
+
+static void sig_handler(int signo)
+{
+    switch (signo)
+    {
+        case SIGINT:
+            int_flag = 1;
+            break;
+        case SIGALRM:
+            term_flag = 1;
+            break;
+    }
+}
 
 int main(int argc, char *argv[])
 {
+    signal(SIGINT, sig_handler); /* init our signal handler */
+
+    /*initialize our variables */
     int         opt;															/* holds the current command line argument */
     const char  *short_opt			= "hs:l:t:";								/* valid args */
     struct      option long_opt[]	= { { "help", no_argument, NULL, 'h' } };	/* valid non-char args */
@@ -48,11 +66,15 @@ int main(int argc, char *argv[])
                 break;
         }
     }
-	
+
+    /* initialize our alarm signal handler */
+    alarm(timeout);
+    signal(SIGALRM, sig_handler);
+
 	/* initialize some shared memory vars */
-	key_t key_clock = ftok("/tmp", 44);
+	int key_clock = ftok("/tmp", 44);
 	int shmid_clock = shmget(key_clock, sizeof(tick_t), IPC_CREAT | 0666);
-	tick_t *shm_clock = shmat(shmid_clock, NULL, 0);
+	tick_t *shm_clock = (tick_t *)shmat(shmid_clock, NULL, 0);
 	*shm_clock = clock;
 
     /* spawn some slaves */
@@ -70,16 +92,44 @@ int main(int argc, char *argv[])
         else if (slaves[i] == 0)
             execl("./user", "user", NULL);
     }
-	
-	while (((*shm_clock).sec < timeout) && num_slaves > 0)
+
+	while (((*shm_clock).sec < 2))
 	{
-		(*shm_clock).nsec++;
-		if ((*shm_clock).nsec % NSECS_IN_SECS == 0)
-		{
-			(*shm_clock).sec++;
-			(*shm_clock).nsec = 0;
-			printf("The current elapsed time is %ds:%dns\n", (*shm_clock).sec, (*shm_clock).nsec);
-		}
+        /* interrupt was thrown; we need to exit */
+        if (term_flag)
+        {
+            fprintf(stderr, "\nMaster timed out. Terminating now.\n");
+
+            shmdt(shm_clock);
+            shmctl(shmid_clock, IPC_RMID, NULL);
+
+            for (i = 0; i < num_slaves; i++)
+                kill(slaves[i], SIGTERM);
+
+            exit(EXIT_SUCCESS);
+        }
+        else if (int_flag)
+        {
+            fprintf(stderr, "\nInterrupt thrown. Terminating now.\n");
+
+            shmdt(shm_clock);
+            shmctl(shmid_clock, IPC_RMID, NULL);
+
+            for (i = 0; i < num_slaves; i++)
+                kill(slaves[i], SIGTERM);
+
+            exit(EXIT_SUCCESS);
+        }
+        else
+        {
+            (*shm_clock).nsec++;
+    		if ((*shm_clock).nsec % NSECS_IN_SECS == 0)
+    		{
+    			(*shm_clock).sec++;
+    			(*shm_clock).nsec = 0;
+    			printf("The current elapsed time is %ds:%dns\n", (*shm_clock).sec, (*shm_clock).nsec);
+    		}
+        }
 	}
 
     while (num_slaves > 0)
@@ -95,5 +145,5 @@ int main(int argc, char *argv[])
 	shmctl(shmid_clock, IPC_RMID, NULL);
 
 	/* program exited successfully */
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
