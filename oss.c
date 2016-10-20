@@ -34,7 +34,8 @@ static void sig_handler(int signo)
 
 int main(int argc, char *argv[])
 {
-    signal(SIGINT, sig_handler); /* init our signal handler */
+    signal(SIGINT, sig_handler);    /* init our signal handler */
+    signal(SIGCHLD, SIG_IGN);        /* ignore the dead children so we can make new ones */
 
     /*initialize our variables */
     int         opt;															/* holds the current command line argument */
@@ -45,7 +46,8 @@ int main(int argc, char *argv[])
     int         timeout				= 20;                                       /* time before master should kill itself */
     int         i;																/* iterator */
 	//tick_t		tick				= { 0, 0 };									/* time elapsed since execution began */
-    pid_t       slaves[MAX_SLAVES];                                             /* array of slaves by pid */
+    pid_t       slaves[15];                                             /* array of slaves by pid */
+    for (i = 0; i < 15; i++) slaves[i] = -1;
 
     while ((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
     {
@@ -65,7 +67,8 @@ int main(int argc, char *argv[])
                 return 0;
                 break;
             case 's':
-                num_slaves = atoi(optarg);
+                fprintf(stderr, "maximum allowed number of slaves is 15. setting num_slaves to 15\n");
+                num_slaves = (atoi(optarg) > 15) ? 15 : atoi(optarg);
                 break;
             case 'l':
                 //filename = optarg;
@@ -118,7 +121,7 @@ int main(int argc, char *argv[])
     if (msgsnd(pmbqid, &pmb, sizeof(pmb), 0) != 0)
         perror("msgsnd");
 
-	while ((*shm_clock).sec < 2)
+	while ((*shm_clock).sec < 2 && num_slaves < 100)
 	{
         /* interrupt was thrown; we need to exit */
         if (term_flag)
@@ -153,29 +156,40 @@ int main(int argc, char *argv[])
 		{
 			(*shm_clock).sec++;
 			(*shm_clock).nsec = 0;
-            printf("The current elapsed time is %ds:%dns\n", (*shm_clock).sec, (*shm_clock).nsec);
+            fprintf(stderr, "The current elapsed time is %ds:%dns\n", (*shm_clock).sec, (*shm_clock).nsec);
 		}
 
         if (msgrcv(msqid, &msgbuf, sizeof(msgbuf), 2, IPC_NOWAIT) != -1)
+        {
             printf("Master: Child %d is terminating at my time %d:%d because it reached %d:%d\n", msgbuf.pid, (*shm_clock).sec, (*shm_clock).nsec, msgbuf.sec, msgbuf.nsec);
-        // if (msgrcv(msqid, &msgbuf, sizeof(msgbuf), msgbuf.mtype, IPC_NOWAIT) == -1)
-        // {
-        //     if (errno == EINTR || errno == ENOMSG) break; /* don't worry if we're interrupted; being handled elsewhere */
-        //
-        //     perror("msgrcv");
-        //     exit(EXIT_FAILURE);
-        // }
-        // else
-        // {
-        //     printf("Master: Child %d is terminating at my time %d:%d because it reached %d:%d\n", msgbuf.pid, (*shm_clock).sec, (*shm_clock).nsec, msgbuf.sec, msgbuf.nsec);
+            
             /* spawn another slave */
-            //num_slaves++;
+            num_slaves++;
+            int escape = 0;
+            for (i = 0; i < 15; i++)
+            {
+                if (escape == 1) break;
+                else if (kill(slaves[i], 0) == -1 && errno == ESRCH)
+                {
+                    escape = 1;
+                    if ((slaves[i] = fork()) < 0)
+                    {
+                        perror("fork error");
+                        shmdt(shm_clock);
+                    	shmctl(shmid_clock, IPC_RMID, NULL);
+                        msgctl(msqid, IPC_RMID, NULL);
+                        exit(EXIT_FAILURE);
+                    }
+                    else if (slaves[i] == 0)
+                        execl("./user", "user", NULL);
+                }
+            }
 
-            // if ((slaves[num_slaves - 1] = fork()) < 0)
-            //     num_slaves--;
-            // else if (slaves[num_slaves - 1] == 0)
-            //     execl("./user", "user", NULL);
-        //}
+            /* let the other processes know we're finished */
+            pmb.mtype = 1;
+            if (msgsnd(pmbqid, &pmb, sizeof(pmb), 0) != 0)
+                perror("msgsnd");
+        }
 	}
 
 	/* cleanup all of our shared memory */

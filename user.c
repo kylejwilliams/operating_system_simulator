@@ -55,10 +55,7 @@ int main(int argc, char *argv[])
 
     // <<< end critical section >>>
 
-    /* let the other processes know we're finished */
-    pmb.mtype = 1;
-    if (msgsnd(pmbqid, &pmb, sizeof(pmb), 0) != 0)
-        perror("msgsnd");
+
 
     exit(EXIT_SUCCESS);
 }
