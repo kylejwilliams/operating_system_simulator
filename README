@@ -1,0 +1,36 @@
+Shared Memory Exercise
+Project 02 - CS 4760
+
+By Kyle Williams
+21 October 2016
+
+TO RUN PROGRAM:
+---------------
+the program takes 5 command line arguments as follows:
+	-h, --help		   displays a help message
+	-s [x]           maximum number of slave processes (default: 5)
+	-l [filename]    the log file to use (default: log.txt)
+	-t [z]			the time in seconds when the master will terminate itself
+
+After execution, a file with the given name will be placed in the executable's 
+directory. This file will contain the outputted messages sent to the queue in 
+the following format:
+'Master: Child [PID] is terminating at my time [ss]:[ns] because it reached 
+[ss]:[ns]'
+
+IMPORTANT:
+----------
+-- I just tested the program several times and it worked correctly each 
+    time, but I don't think I actually fixed some issues. Sometimes the 
+    program may crash. If you run it for the first time it should work 
+    correctly. Then if the slaves didn't exit properly they could remain 
+    after the master process ends. This is because I can't figure out how to 
+    unblock the msgrcv() command. I tried sending it a SIGINT and checking 
+    if errno == EINT inside of the msgrcv, but that just causes the program to 
+    hang.
+-- If it gives you a Seg. Fault, then it's because the shared memory wasn't 
+    cleared correctly. You can use 'ipcrm shm [shmid]' to clear the memory 
+    and then it should run again.
+-- If it times out and terminates with no results in the file, then that means 
+    that the messages weren't getting read by the user processes. This usually
+    meant that there were zombie processes. Killing them should make it work again. 
