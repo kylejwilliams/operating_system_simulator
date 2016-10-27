@@ -26,15 +26,15 @@ int main(int argc, char *argv[])
     int end_time = 0;
 
     /* get all of the shared memory variables */
-    key_t key_clock = ftok("/tmp", 44);
+    key_t key_clock = ftok("/tmp", 86);
     int shmid_clock = shmget(key_clock, sizeof(int), 0666);
     tick_t *shm_clock = (tick_t *)shmat(shmid_clock, NULL, 0);
 
-    key_t   key_msg = ftok("/tmp", 97);
+    key_t   key_msg = ftok("/tmp", 17);
     msgbuf_t msg;
     int     msqid = msgget(key_msg, 0666);
 
-    key_msg = ftok("/tmp", 11);
+    key_msg = ftok("/tmp", 78);
     prcmsgbuf_t pmb;
     int pmbqid = msgget(key_msg, 0666);
     

@@ -83,13 +83,13 @@ int main(int argc, char *argv[])
 
 
   	/* initialize some shared memory vars */
-  	int key_clock = ftok("/tmp", 44);
+  	int key_clock = ftok("/tmp", 86);
   	int shmid_clock = shmget(key_clock, sizeof(tick_t), 0666 | IPC_CREAT);
   	tick_t *shm_clock = (tick_t *)shmat(shmid_clock, NULL, 0);
   	(*shm_clock).nsec = 0;
     (*shm_clock).sec = 0;
 
-    key_t key_msg = ftok("/tmp", 97);
+    key_t key_msg = ftok("/tmp", 17);
     msgbuf_t msgbuf;
     int msqid = msgget(key_msg, IPC_CREAT | 0666);
     msgbuf.mtype = 0;
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
     msgbuf.sec = 0;
     msgbuf.pid = getpid();
 
-    key_msg = ftok("/tmp", 11);
+    key_msg = ftok("/tmp", 78);
     prcmsgbuf_t pmb;
     int pmbqid = msgget(key_msg, IPC_CREAT | 0666);
 
